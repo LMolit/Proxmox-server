@@ -1,6 +1,6 @@
 Jellyfin + arr stack setup
 
-**Containers** 
+##Containers##
 Jellyfin CT 101 IP 10.0.0.10
 Seer CT 102 - IP 10.0.0.14
 Prowlar CT 103 - IP 10.0.0.19
