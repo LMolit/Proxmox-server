@@ -1,6 +1,6 @@
 Jellyfin + Arr stack setup
 
-Containers
+**Containers**
 | Service | CT ID | IP |
 |---|---|---|
 | Jellyfin | 101 | 10.0.0.10 |
