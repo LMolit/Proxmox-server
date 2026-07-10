@@ -1,4 +1,4 @@
-Jellyfin + Arr stack setup
+# Jellyfin + Arr stack setup
 
 **Containers**
 | Service | CT ID | IP |
@@ -13,7 +13,7 @@ Jellyfin + Arr stack setup
 
 I used Proxmox VE helper scripts to set each service up in an unprivileged LXC. they each have an assigned static ip address. I have edited my router's DHCP to start at 10.0.0.100 so everything between 10.0.0.2-99 is available for container static ips. ‘’
 
-Storage -
+## Storage
 
 Starting this project, I only had a 1TB HDD, and knowing I would soon be adding more, just not sure how many, I decided to create a mergerfs pool. That way my first hard drive could just be the first leaf, and I could add others later without restructuring anything. 
 
@@ -22,7 +22,7 @@ I then bind mounted this pool into each LXC that needed access to it, Sonarr, Ra
 I solved this by creating one user, mediauser, that owns everything under /mnt/media on the host. I then ran each relevant service inside its container as this same UID, and punched a hole through each container's UID mapping so that specific UID doesn't get shifted like the rest of the container's range does,  it passes straight through to the mediauser's ID instead. This keeps file ownership consistent across every container that touches the media pool, regardless of which service wrote the file.
 
 
-Jellyfin -
+## Jellyfin
 
 Jellyfin is set up to run on its own unprivileged LXC to keep it isolated for security and troubleshooting. It has transcoding through the intel cpu quicksync. Most media is streamed through the moonfin app for better user experience and because it connects with seer so users can request media inside the app. 
 
@@ -30,11 +30,11 @@ Raddarr + Sonarr
 
 Radarr and Sonarr work pretty much the same way; they are both running in their own unprivileged LXC’s. They decide what files to grab, searching quality and size to find one that adheres to my specifications. Once qbittorent downloads the file they then import and rename it to fit jellyfins naming conventions. For my purposes with limited but not no storage 1080p in the right detail while not being too large, i also had a problem with it grabbing a non compressed version so i added a size limit, 2.5gb for a movie and 15gb for a series to aggressively grab compressed files preferably x265. 
 
-Prowlarr 
+## Prowlarr 
 
 Prowlarr handles the indexers, which are very finicky. Rather than configuring each indexer separately inside both Radarr and Sonarr, I set it up once in Prowlarr, which connects to Radarr and Sonarr via their APIs and pushes indexer changes to both automatically.
 
-Qbittorent + vpn gateway
+## Qbittorent + vpn gateway
 
 QBittorrent downloads files from multiple peers and reassembles the pieces into a complete file. To stay anonymous, all of its traffic is routed through a WireGuard VPN gateway running in its own, qBittorrent has no other way out, which creates a network level kill switch if the gateway goes down, qBittorrent goes down with it, rather than falling back to a direct connection. 
 
