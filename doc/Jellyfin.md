@@ -10,13 +10,6 @@ Containers
 | Radarr | 105 | 10.0.0.17 |
 | VPN Gateway | 106 | 10.0.0.15 |
 | qBittorrent | 107 | 10.0.0.16 |
-Jellyfin CT 101 IP 10.0.0.10
-Seer CT 102 - IP 10.0.0.14
-Prowlar CT 103 - IP 10.0.0.19
-Sonarr CT 104 - IP 10.0.0.18
-Raadarr CT 105 - IP 10.0.0.17
-Vpn-gateway CT 106 - IP 10.0.0.15
-Qbittorent CT 107 - IP 10.0.0.16
 
 I used Proxmox VE helper scripts to set each service up in an unprivileged LXC. they each have an assigned static ip address. I have edited my router's DHCP to start at 10.0.0.100 so everything between 10.0.0.2-99 is available for container static ips. ‘’
 
