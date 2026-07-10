@@ -1,9 +1,15 @@
 Jellyfin + Arr stack setup
 
 Containers
-|
----
-|
+| Service | CT ID | IP |
+|---|---|---|
+| Jellyfin | 101 | 10.0.0.10 |
+| Seer | 102 | 10.0.0.14 |
+| Prowlarr | 103 | 10.0.0.19 |
+| Sonarr | 104 | 10.0.0.18 |
+| Radarr | 105 | 10.0.0.17 |
+| VPN Gateway | 106 | 10.0.0.15 |
+| qBittorrent | 107 | 10.0.0.16 |
 Jellyfin CT 101 IP 10.0.0.10
 Seer CT 102 - IP 10.0.0.14
 Prowlar CT 103 - IP 10.0.0.19
