@@ -1,103 +1,44 @@
-# Jellyfin (CT 101)
+Jellyfin + arr stack setup
 
-## Overview
+Containers 
+Jellyfin CT 101 IP 10.0.0.10
+Seer CT 102 - IP 10.0.0.14
+Prowlar CT 103 - IP 10.0.0.19
+Sonarr CT 104 - IP 10.0.0.18
+Raadarr CT 105 - IP 10.0.0.17
+Vpn-gateway CT 106 - IP 10.0.0.15
+Qbittorent CT 107 - IP 10.0.0.16
 
-Media streaming server. Serves Movies, TV, and (planned) Audiobooks/Books to
-LAN clients. Installed via the Proxmox Community Helper Script, running as an
-unprivileged LXC. Hardware-accelerated transcoding via Intel Quick Sync
-(iGPU passthrough), verified working with `vainfo` prior to this
-documentation being written.
+I used Proxmox VE helper scripts to set each service up in an unprivileged LXC. they each have an assigned static ip address. I have edited my router's DHCP to start at 10.0.0.100 so everything between 10.0.0.2-99 is available for container static ips. ‘’
 
-## Specs
+Storage -
 
-| Field | Value |
-|---|---|
-| CT ID | 101 |
-| Hostname | jellyfin |
-| Template | *(TBD — fill in from `pct config 101`)* |
-| Unprivileged | Yes |
-| Cores | *(TBD)* |
-| RAM | *(TBD)* |
-| Disk | *(TBD)* |
+Starting this project, I only had a 1TB HDD, and knowing I would soon be adding more, just not sure how many, I decided to create a mergerfs pool. That way my first hard drive could just be the first leaf, and I could add others later without restructuring anything. 
 
-## Network
+I then bind mounted this pool into each LXC that needed access to it, Sonarr, Radarr, Jellyfin, and qBittorrent but because I also needed these containers to write to it, and they were all unprivileged with the pool living on the Proxmox host, I ran into a UID mismatch problem. Unprivileged containers shift their internal UIDs to a high range on the host, so a container process wouldn't naturally own anything on the host-side pool. 
 
-| Interface | Bridge | IP | Gateway |
-|---|---|---|---|
-| eth0 | vmbr0 (LAN) | 10.0.0.10/24 | 10.0.0.1 |
+I solved this by creating one user, mediauser, that owns everything under /mnt/media on the host. I then ran each relevant service inside its container as this same UID, and punched a hole through each container's UID mapping so that specific UID doesn't get shifted like the rest of the container's range does,  it passes straight through to the mediauser's ID instead. This keeps file ownership consistent across every container that touches the media pool, regardless of which service wrote the file.
 
-## Key files & paths
 
-| Path (in container) | Purpose |
-|---|---|
-| `/media` | Bind mount → host `/mnt/media` (mergerfs pool) |
-| `/media/Movies` | Movie library |
-| `/media/TV` | TV library |
-| `/media/Audiobooks` | Audiobook library (planned — not yet added to Jellyfin libraries) |
-| *(TBD)* | Jellyfin config/metadata directory — confirm helper script's default location |
+Jellyfin -
 
-**Host-side ownership note:** everything under `/mnt/media` is owned by
-`mediauser` (UID/GID 1000:1000) on the Proxmox host. Jellyfin's internal
-user/UID mapping should be verified against this — unconfirmed as of this
-doc. If Jellyfin can read but not write (e.g. for metadata `.nfo`
-generation or thumbnail extraction inside library folders), this mapping
-is the first thing to check.
+Jellyfin is set up to run on its own unprivileged LXC to keep it isolated for security and troubleshooting. It has transcoding through the intel cpu quicksync. Most media is streamed through the moonfin app for better user experience and because it connects with seer so users can request media inside the app. 
 
-## Ports
+Raddarr + Sonarr
 
-| Port | Protocol | Purpose |
-|---|---|---|
-| 8096 | TCP | Web UI / API (HTTP) |
-| 8920 | TCP | Web UI / API (HTTPS, if enabled) |
-| 1900 | UDP | DLNA discovery (if enabled) |
-| 7359 | UDP | Jellyfin client auto-discovery |
+Radarr and Sonarr work pretty much the same way; they are both running in their own unprivileged LXC’s. They decide what files to grab, searching quality and size to find one that adheres to my specifications. Once qbittorent downloads the file they then import and rename it to fit jellyfins naming conventions. For my purposes with limited but not no storage 1080p in the right detail while not being too large, i also had a problem with it grabbing a non compressed version so i added a size limit, 2.5gb for a movie and 15gb for a series to aggressively grab compressed files preferably x265. 
 
-*(Confirm which of these are actually enabled/needed for your setup —
-DLNA/auto-discovery may be unused if you're not running local network
-client auto-detection.)*
+Prowlarr 
 
-## Quick tests
+Prowlarr handles the indexers, which are very finicky. Rather than configuring each indexer separately inside both Radarr and Sonarr, I set it up once in Prowlarr, which connects to Radarr and Sonarr via their APIs and pushes indexer changes to both automatically.
 
-```bash
-# Is the service running?
-pct exec 101 -- systemctl status jellyfin
+Qbittorent + vpn gateway
 
-# Is hardware transcoding available inside the container?
-pct exec 101 -- vainfo
+QBittorrent downloads files from multiple peers and reassembles the pieces into a complete file. To stay anonymous, all of its traffic is routed through a WireGuard VPN gateway running in its own, qBittorrent has no other way out, which creates a network level kill switch if the gateway goes down, qBittorrent goes down with it, rather than falling back to a direct connection. 
 
-# Is the media mount visible and populated?
-pct exec 101 -- ls -la /media
+qBittorrent reaches the gateway through vmbr1, a virtual bridge both qBittorrent's eth1 and the gateway’s eth1 plug into this same bridge, giving the two containers a private link that nothing else on the LAN can see or reach.
 
-# Can Jellyfin's process actually write inside the media mount?
-# (run as whatever UID Jellyfin runs as inside the container)
-pct exec 101 -- touch /media/Movies/.write_test && pct exec 101 -- rm /media/Movies/.write_test
-```
+On the gateway side, a separate interface sits on the regular LAN with normal internet access. This is what the gateway uses to perform the WireGuard handshake with the vpn’s server and establish a wg0 tunnel interface. The gateway then forwards traffic arriving on its eth1 out through wg0, and NATs it so it looks like it's coming from itself. 
 
-## Troubleshooting
-
-- **Library scan not picking up new files:** confirm `/media` bind mount
-  is live (`pct exec 101 -- mount | grep media`), and check file
-  permissions on the host under `/mnt/media`.
-- **Transcoding falls back to software/CPU:** re-run `vainfo` inside the
-  container; if it errors, check that `/dev/dri` is still passed through
-  correctly in `pct config 101` (helper script should have handled this,
-  but worth re-verifying after any Proxmox kernel update).
-- **Container won't start after host reboot:** check `pct config 101` for
-  `onboot: 1`; check `journalctl -xe` on the host around the container's
-  start time.
-
-## Future improvements
-
-- Add Audiobooks and Books libraries once Readarr/Audiobookshelf are live.
-- Confirm and document the exact UID Jellyfin runs as internally, and
-  align it explicitly with `mediauser` (1000:1000) rather than assuming
-  the helper script already did this correctly.
-- Consider moving to a longer library-refresh interval or webhook-based
-  refresh once Sonarr/Radarr are live, rather than polling.
-- Document backup approach for Jellyfin's config/metadata directory
-  (separate from media itself, per the stack-wide backup strategy).
-
-## Changelog
-
-- *(date)* — Initial documentation written. Container pre-existed this
-  documentation effort; some fields marked TBD pending verification.
+Back on qBittorrent's side, its own eth0 sits on the LAN too, but deliberately has no gateway configured so even though it's reachable from the LAN, it has no route to anywhere beyond the LAN through that interface. Combined with an explicit firewall rule on the gateway that drops any eth1 traffic not destined for wg0, qBittorrent has exactly one way out to the internet, through the bridge, through the LXC, and finally through the tunnel. No fallback path if any link in that chain breaks.
+ 
